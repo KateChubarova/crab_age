@@ -4,6 +4,7 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import mean_squared_error as mse
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.ensemble import GradientBoostingRegressor
+from sklearn.neighbors import KNeighborsRegressor, KNeighborsClassifier
 
 # check data for nulls, duplicates
 # divide set to X and Y
@@ -38,6 +39,7 @@ def info():
     print(data.shape)
     print(data.dtypes)
 
+
 def tree_classifier():
     model = RandomForestClassifier(n_estimators=100, max_depth=20, random_state=1)
     model.fit(X_train, y_train)
@@ -58,7 +60,7 @@ def calculate_corr():
 
 
 def random_forest():
-    model = RandomForestRegressor(n_estimators=100, max_depth=20)
+    model = RandomForestRegressor(n_estimators=250, max_depth=20)
     model.fit(X_train, y_train)
     predictions = model.predict(X_test)
 
@@ -68,15 +70,44 @@ def random_forest():
     y_submission = model.predict(X_submission.drop('id', axis='columns'))
     write_to_file(y_submission)
 
+
 def gradient_booster():
-    model = GradientBoostingRegressor()
+    model = GradientBoostingRegressor(n_estimators=300,
+                                 learning_rate=0.05)
     model.fit(X_train, y_train)
     predictions = model.predict(X_test)
 
     print('gradient booster')
     print(mse(y_test, predictions))
 
+    y_submission = model.predict(X_submission.drop('id', axis='columns'))
+    write_to_file(y_submission)
+
+
+def kneighbors_regressor():
+    model = KNeighborsRegressor(n_neighbors=15)
+    model.fit(X_train, y_train)
+
+    predictions = model.predict(X_test)
+
+    print('kneighbors regressor')
+    print(mse(y_test, predictions))
+
+
+def kneighbors_classifier():
+    model = KNeighborsClassifier(n_neighbors=20)
+    model.fit(X_train, y_train)
+
+    predictions = model.predict(X_test)
+
+    print('kneighbors classifier')
+    print(mse(y_test, predictions))
+
 
 # random_forest()  # 4.370084275904191
 # tree_classifier() #5.691819781478905
-# gradient_booster() #4.239210263601029
+gradient_booster() #4.239210263601029 , 4.206711490036174(n_estimators=300,learning_rate=0.05, random_state=100)
+# kneighbors_regressor() #4.447641236194659
+# kneighbors_classifier() #5.915906207799648
+
+# calculate_corr()
