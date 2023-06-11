@@ -1,10 +1,12 @@
 import pandas as pd
 from sklearn.model_selection import train_test_split
-from sklearn.ensemble import RandomForestClassifier
-from sklearn.metrics import mean_squared_error as mse
-from sklearn.ensemble import RandomForestRegressor
+from sklearn.metrics import mean_absolute_error as mae
 from sklearn.ensemble import GradientBoostingRegressor
-from sklearn.neighbors import KNeighborsRegressor, KNeighborsClassifier
+from sklearn.model_selection import GridSearchCV
+from sklearn.model_selection import RepeatedKFold
+from keras.models import Sequential
+from keras.layers import Dense
+from keras.wrappers.scikit_learn import KerasRegressor
 
 # check data for nulls, duplicates
 # divide set to X and Y
@@ -14,100 +16,108 @@ from sklearn.neighbors import KNeighborsRegressor, KNeighborsClassifier
 # get predictions for test
 # upload to kaggle
 
+from helpers import gender_to_numeric, write_to_file, remove_out_liners
+
 data = pd.read_csv("train.csv")
 X_submission = pd.read_csv('test.csv')
-
+#
 Y = data['Age']
 X = data.drop(['Age', 'id'], axis='columns')
 
-
-def gender_to_numeric(x):
-    if x == 'I': return 3
-    if x == 'M': return 2
-    if x == 'F': return 1
-
-
 X['Sex'] = X['Sex'].apply(gender_to_numeric)
 X_submission['Sex'] = X_submission['Sex'].apply(gender_to_numeric)
+
+# X = pd.get_dummies(X, columns=['Sex'])
+# X_submission = pd.get_dummies(X_submission, columns=['Sex'])
+
+X, y = remove_out_liners(X, Y)
 
 X_train, X_test, y_train, y_test = train_test_split(
     X, Y, test_size=0.33, random_state=42)
 
 
-def info():
-    print(data.head())
-    print(data.shape)
-    print(data.dtypes)
-
-
-def tree_classifier():
-    model = RandomForestClassifier(n_estimators=100, max_depth=20, random_state=1)
-    model.fit(X_train, y_train)
-    predictions = model.predict(X_test)
-
-    print('tree_classifier')
-    print(mse(y_test, predictions))
-
-
-def write_to_file(predictions):
-    output = pd.DataFrame({'id': X_submission.id, 'Age': predictions})
-    output.to_csv('submission.csv', index=False)
-
-
-def calculate_corr():
-    corr_matrix = data.corr()
-    print(corr_matrix["Age"].sort_values(ascending=False))
-
-
-def random_forest():
-    model = RandomForestRegressor(n_estimators=250, max_depth=20)
-    model.fit(X_train, y_train)
-    predictions = model.predict(X_test)
-
-    print('random_forest')
-    print(mse(y_test, predictions))
-
-    y_submission = model.predict(X_submission.drop('id', axis='columns'))
-    write_to_file(y_submission)
-
-
 def gradient_booster():
-    model = GradientBoostingRegressor(n_estimators=300,
-                                 learning_rate=0.05)
+    model = GradientBoostingRegressor(n_estimators=500,
+                                      learning_rate=0.01,
+                                      subsample=0.7, max_depth=7)
     model.fit(X_train, y_train)
+
     predictions = model.predict(X_test)
 
     print('gradient booster')
-    print(mse(y_test, predictions))
+    print(mae(y_test, predictions))
 
     y_submission = model.predict(X_submission.drop('id', axis='columns'))
-    write_to_file(y_submission)
+    write_to_file(y_submission, X_submission)
 
 
-def kneighbors_regressor():
-    model = KNeighborsRegressor(n_neighbors=15)
-    model.fit(X_train, y_train)
-
-    predictions = model.predict(X_test)
-
-    print('kneighbors regressor')
-    print(mse(y_test, predictions))
-
-
-def kneighbors_classifier():
-    model = KNeighborsClassifier(n_neighbors=20)
-    model.fit(X_train, y_train)
-
-    predictions = model.predict(X_test)
-
-    print('kneighbors classifier')
-    print(mse(y_test, predictions))
+def grid_search_cv_gradient_boost():
+    param_grid = {'n_estimators': [10, 50, 100, 300],
+                  'learning_rate': [0.001, 0.01, 0.1, 1.0],
+                  'subsample': [0.5, 0.7, 1.0],
+                  'max_depth': [3, 7, 9, 15]}
+    model = GradientBoostingRegressor()
+    cv = RepeatedKFold(n_splits=10, n_repeats=3, random_state=1)
+    grid = GridSearchCV(model, param_grid, refit=True, verbose=3, n_jobs=-1, cv=cv, scoring='neg_mean_absolute_error')
+    grid.fit(X, Y)
+    print("grid search cv")
+    print(grid.best_params_)
 
 
-# random_forest()  # 4.370084275904191
-# tree_classifier() #5.691819781478905
-gradient_booster() #4.239210263601029 , 4.206711490036174(n_estimators=300,learning_rate=0.05, random_state=100)
-# kneighbors_regressor() #4.447641236194659
-# kneighbors_classifier() #5.915906207799648
+def model_building_function(X, n_outputs_, hidden_layer_sizes):
+    model = Sequential()
+    model.add(Dense(X.shape[1], activation="relu", input_shape=X.shape[1:]))
+    for size in hidden_layer_sizes:
+        model.add(Dense(size, activation="relu"))
+    model.add(Dense(n_outputs_, activation="relu"))
+    model.compile("adam", loss="mean_absolute_error")
+    return model
 
-# calculate_corr()
+
+def keros_regressor():
+    estimator = KerasRegressor(build_fn=model_building_function(X, 1, hidden_layer_sizes=[20, 10, 5]))
+    estimator.fit(X_train, y_train)
+
+    print(estimator.score(X_test, y_test))
+    print(estimator.score(X_train, y_train))
+
+    y_prediction = estimator.predict(X_test)
+    y_train_prediction = estimator.predict(X_train)
+
+    print(mae(y_test, y_prediction))
+    print(mae(y_train, y_train_prediction))
+
+    y_submission = estimator.predict(X_submission.drop('id', axis='columns'))
+    write_to_file(y_submission, X_submission)
+
+
+def get_model(X_train_normalized):
+    model = Sequential()
+    model.add(Dense(128, input_shape=(X_train_normalized.shape[1],)))
+    model.add(Dense(64, activation='relu'))
+    model.add(Dense(64, activation='relu'))
+    model.add(Dense(1, activation='linear'))
+    model.compile(optimizer='adam', loss='mean_absolute_error')
+    return model
+
+
+def chat_gpt_keras_test():
+    # X_train_normalized = (X_train - np.mean(X_train, axis=0)) / np.std(X_train, axis=0)
+
+    model = get_model(X_train)
+    model.fit(X_train, y_train, epochs=100, batch_size=32, validation_split=0.2)
+
+    # X_test_normalized = (X_test - np.mean(X_test, axis=0)) / np.std(X_test, axis=0)
+
+    y_prediction = model.predict(X_test)
+
+    print(mae(y_prediction, y_test))
+
+    # _X_submission = X_submission.drop('id', axis='columns')
+    # X_submission_normalized = (_X_submission - np.mean(_X_submission, axis=0)) / np.std(_X_submission, axis=0)
+    # y_submission = model.predict(X_submission_normalized)
+
+    # write_to_file(y_submission, X_submission)
+
+chat_gpt_keras_test()  # 1.3891355250165365, 1.3824723439584041 - remove outliners
+
