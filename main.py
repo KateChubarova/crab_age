@@ -20,7 +20,7 @@ from helpers import gender_to_numeric, write_to_file, remove_out_liners
 
 data = pd.read_csv("train.csv")
 X_submission = pd.read_csv('test.csv')
-#
+
 Y = data['Age']
 X = data.drop(['Age', 'id'], axis='columns')
 
@@ -62,33 +62,6 @@ def grid_search_cv_gradient_boost():
     grid.fit(X, Y)
     print("grid search cv")
     print(grid.best_params_)
-
-
-# def model_building_function(X, n_outputs_, hidden_layer_sizes):
-#     model = Sequential()
-#     model.add(Dense(X.shape[1], activation="relu", input_shape=X.shape[1:]))
-#     for size in hidden_layer_sizes:
-#         model.add(Dense(size, activation="relu"))
-#     model.add(Dense(n_outputs_, activation="relu"))
-#     model.compile("adam", loss="mean_absolute_error")
-#     return model
-
-
-# def keros_regressor():
-#     estimator = KerasRegressor(build_fn=model_building_function(X, 1, hidden_layer_sizes=[20, 10, 5]))
-#     estimator.fit(X_train, y_train)
-#
-#     print(estimator.score(X_test, y_test))
-#     print(estimator.score(X_train, y_train))
-#
-#     y_prediction = estimator.predict(X_test)
-#     y_train_prediction = estimator.predict(X_train)
-#
-#     print(mae(y_test, y_prediction))
-#     print(mae(y_train, y_train_prediction))
-#
-#     y_submission = estimator.predict(X_submission.drop('id', axis='columns'))
-#     write_to_file(y_submission, X_submission)
 
 
 def get_model(X_train_normalized):
